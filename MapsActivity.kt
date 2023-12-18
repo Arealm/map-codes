@@ -57,6 +57,8 @@ import com.yandex.mapkit.Animation
 import com.yandex.mapkit.GeoObject
 import com.yandex.mapkit.MapKitFactory
 import com.yandex.mapkit.geometry.Point
+import com.yandex.mapkit.layers.GeoObjectTapEvent
+import com.yandex.mapkit.layers.GeoObjectTapListener
 import com.yandex.mapkit.map.CameraPosition
 import com.yandex.mapkit.map.IconStyle
 import com.yandex.mapkit.map.InputListener
@@ -79,9 +81,9 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     private lateinit var binding: ActivityMapsBinding
 
-    private var map:GoogleMap? = null
-    private var currentLocation : Location? = null
-    private var placesClient : PlacesClient? = null
+    private var map: GoogleMap? = null
+    private var currentLocation: Location? = null
+    private var placesClient: PlacesClient? = null
     private var hasLocation: Boolean = false
 
     //当前定位marker点
@@ -90,18 +92,16 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
-    val REQUEST_PHOTO_CODE = 3002 //获取权限
-
-    var startGoogleMap :Boolean = false
-    var countryCode :String? = ""
-    var mapFragment: SupportMapFragment? =null
-    var searchManager: SearchManager? =null
-    var searchOptions: SearchOptions? =null
-    var searchSession: Session? =null
-    var currentYandexPoint : GeoObject? = null
+    var startGoogleMap: Boolean = false
+    var countryCode: String? = ""
+    var mapFragment: SupportMapFragment? = null
+    var searchManager: SearchManager? = null
+    var searchOptions: SearchOptions? = null
+    var searchSession: Session? = null
+    var currentYandexPoint: GeoObject? = null
     var currentPoi: PointOfInterest? = null
 
-    companion object{
+    companion object {
         const val TAG = "MapsActivity"
         const val RESULT_CODE = 1102
         const val STORE_NAME = "store_name"
@@ -114,20 +114,24 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         super.onCreate(savedInstanceState)
         binding = ActivityMapsBinding.inflate(layoutInflater)
 
-        startGoogleMap = intent.getBooleanExtra("google",false)
+        startGoogleMap = intent.getBooleanExtra("google", false)
         countryCode = intent.getStringExtra("country_code")
         mapFragment = supportFragmentManager.findFragmentById(R.id.google_map) as SupportMapFragment
-        if (startGoogleMap){
+        if (startGoogleMap) {
             binding.cardView.visibility = View.VISIBLE
             mapFragment?.view?.visibility = View.VISIBLE
             binding.mapview.visibility = View.GONE
             binding.yandexCv.visibility = View.GONE
             binding.clBottom.visibility = View.VISIBLE
+            binding.llYandexSearch.visibility = View.GONE
+            binding.yandexLocation.visibility = View.GONE
             initGoogle()
         } else {
             binding.mapview.visibility = View.VISIBLE
             binding.yandexCv.visibility = View.VISIBLE
             binding.clBottom.visibility = View.VISIBLE
+            binding.llYandexSearch.visibility = View.VISIBLE
+            binding.yandexLocation.visibility = View.VISIBLE
             binding.cardView.visibility = View.GONE
             mapFragment?.view?.visibility = View.GONE
             initYandex()
@@ -135,7 +139,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         setContentView(binding.root)
 
         binding.btnSure.setOnClickListener {
-            if (!startGoogleMap){
+            if (!startGoogleMap) {
                 yandexBack()
             } else {
                 googleBack()
@@ -143,13 +147,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         }
     }
 
-    fun upBottom(){
-        if (!startGoogleMap){
-            binding.tvName.text = "${currentYandexPoint?.name} \n ${currentYandexPoint?.descriptionText}"
+    fun upBottom() {
+        if (!startGoogleMap) {
+            binding.tvName.text =
+                "${currentYandexPoint?.name} \n ${currentYandexPoint?.descriptionText}"
         } else {
             // google
             binding.tvName.text = "${currentPoi?.name}"
-            Toast.makeText(this, """Clicked: ${currentPoi?.name}
+            Toast.makeText(
+                this, """Clicked: ${currentPoi?.name}
             Place ID:${currentPoi?.placeId}
             Latitude:${currentPoi?.latLng?.latitude} Longitude:${currentPoi?.latLng?.longitude}""",
                 Toast.LENGTH_SHORT
@@ -170,7 +176,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         val searchSessionListener = object : SearchListener {
             override fun onSearchResponse(response: Response) {
                 // Handle search response.
-               dismissLoadingDialog()
+                dismissLoadingDialog()
                 data.clear()
                 response.collection.children.forEach {
                     it.obj?.let { it1 -> data.add(it1) }
@@ -220,6 +226,14 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         }
         binding.mapview.map.addInputListener(inputListener)
 
+        val geoObjectTapListener = object : GeoObjectTapListener {
+            override fun onObjectTap(event: GeoObjectTapEvent): Boolean {
+                println("onObjectTap ${event}")
+                return false
+            }
+        }
+        binding.mapview.map.addTapListener(geoObjectTapListener)
+
 //        val region = VisibleRegionUtils.toPolygon(VisibleRegion())
 
         binding.btnYandexSearch.setOnClickListener {
@@ -235,64 +249,59 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         }
         showYandexTip()
 
+        binding.yandexLocation.setOnClickListener {
+            XXPermissions.with(this)
+                .permission(Permission.ACCESS_FINE_LOCATION)
+                .permission(Permission.ACCESS_COARSE_LOCATION)
+                .request { permissions, allGranted ->
+                    if (allGranted) {
+                        getLastLocation()
+//                        hasLocation = false
+//                        startLocationUpdates()
+                    } else {
+                        permissionFail()
+                    }
+                }
+        }
+
         XXPermissions.with(this)
             .permission(Permission.ACCESS_FINE_LOCATION)
             .permission(Permission.ACCESS_COARSE_LOCATION)
             .request { permissions, allGranted ->
                 if (allGranted) {
+//                    getLastLocation()
                     startLocationUpdates()
                 } else {
                     permissionFail()
                 }
             }
 
-//        if (ActivityCompat.checkSelfPermission(
-//                this,
-//                Manifest.permission.ACCESS_FINE_LOCATION
-//            ) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(
-//                this,
-//                Manifest.permission.ACCESS_COARSE_LOCATION
-//            ) != PackageManager.PERMISSION_GRANTED
-//        ) {
-//            return
-//        }
-//
-//        fusedLocationProviderClient.requestLocationUpdates(
-//            LocationRequest.create()
-//                .setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY),//设置高精度, //3秒一次定位请求
-//            locationCallback,
-//            Looper.getMainLooper()
-//        )
-
-
-
     }
-    private val data : MutableList<GeoObject> = mutableListOf()
-    private var yandexTipAdapter : YandexMapTipAdapter? = YandexMapTipAdapter()
+
+    private val data: MutableList<GeoObject> = mutableListOf()
+    private var yandexTipAdapter: YandexMapTipAdapter? = YandexMapTipAdapter()
 
     @SuppressLint("MissingPermission")
-    private fun getLastLocation(): Location? {
-        var location: Location? = null
-        val locationManager: LocationManager = this.getSystemService(LOCATION_SERVICE) as LocationManager ?: return null
+    private fun getLastLocation() {
+        val locationManager: LocationManager = this.getSystemService(LOCATION_SERVICE) as LocationManager
 
-        locationManager.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, 0, 0f, mLocationListener);
-//        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, 10f, mLocationListener);
+        var loc = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER)
+        Log.e("yandex", loc?.latitude.toString())
+        Log.e("yandex", loc?.longitude.toString())
+        if (loc != null) {
+            moveYandexMap(Point(loc.latitude, loc.longitude))
+            return
+        }
 
-
-
-//        val providers: List<String?> = locationManager.getProviders(true)
-//        for (provider in providers) {
-//            provider?:return null
-//            val l = locationManager.getLastKnownLocation(provider) ?: continue
-//            if (location == null || l.accuracy < location.accuracy) {
-//                // Found best last known location: %s", l);
-//                location = l
-//            }
-//        }
-        return location
+        locationManager.requestLocationUpdates(
+            LocationManager.GPS_PROVIDER,
+            0,
+            0f,
+            mLocationListener
+        );
     }
 
-    private val  mLocationListener = object : LocationListener {
+    private val mLocationListener = object : LocationListener {
         override fun onProviderEnabled(provider: String) {
         }
 
@@ -304,41 +313,50 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
 
         override fun onLocationChanged(p0: Location) {
-            println("")
+            moveYandexMap(Point(p0.latitude, p0.longitude))
         }
     };
 
-
+    fun moveYandexMap(point: Point){
+        val position = binding.mapview.map?.cameraPosition?.run {
+            CameraPosition(
+                point,
+                15f,
+                azimuth,
+                tilt
+            )
+        } ?: return
+        binding.mapview.map?.move(
+            position,
+            Animation(Animation.Type.SMOOTH, 0.5f),
+            null
+        )
+    }
 
 
     private fun showYandexTip() {
         binding.rv.adapter = yandexTipAdapter
-        binding.rv.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL,false)
-        yandexTipAdapter?.setOnItemClickListener{adapter, _, position ->
-//        binding.mapview.map.move(
-//            val placemark = map？.mapObjects.addPlacemark().apply {
-//            geometry = Point(59.935493, 30.327392)
-//            setIcon(ImageProvider.fromResource(this, R.drawable.ic_pin))
-//        )
+        binding.rv.layoutManager = LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false)
+        yandexTipAdapter?.setOnItemClickListener { adapter, _, position ->
             currentYandexPoint = data[position]
             currentYandexPoint?.let {
                 moveYandexTip(it)
             }
             upBottom()
         }
-//        binding.yandexEt.setTokenizer(CommaTokenizer())
     }
 
-    private fun yandexBack(){
+    private fun yandexBack() {
         val add = currentYandexPoint?.descriptionText ?: currentYandexPoint?.name.toString()
         intent.putExtra(STORE_NAME, currentYandexPoint?.name.toString())
-        intent.putExtra(STORE_ADD,  add)
+        intent.putExtra(STORE_ADD, add)
         intent.putExtra(STORE_LAT, currentYandexPoint?.geometry?.get(0)?.point?.latitude)
         intent.putExtra(STORE_LONG, currentYandexPoint?.geometry?.get(0)?.point?.longitude)
         setResult(RESULT_CODE, intent)
         finish()
     }
-    private fun googleBack(){
+
+    private fun googleBack() {
         val list = currentPoi?.name?.split("\n")
         intent.putExtra(STORE_NAME, list?.get(0))
         intent.putExtra(STORE_ADD, list?.get(1))
@@ -348,36 +366,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         finish()
     }
 
-    private fun moveYandexTip(geoObject: GeoObject){
-        val point = geoObject.geometry.get(0).point ?: return
-        val imageProvider = ImageProvider.fromResource(this, R.drawable.search_result)
-        val listener = MapObjectTapListener { p0, p1 ->
-            yandexBack()
-            true
-        }
-        binding.mapview.map?.mapObjects?.addPlacemark()?.apply {
-            geometry = point
-            setIcon(imageProvider)
-            setIconStyle(
-                IconStyle().apply {
-                    anchor = PointF(0.5f, 1.0f)
-                    scale = 0.6f
-                    zIndex = 10f
-                }
-            )
-            setText("${geoObject.name.toString()} \n ", TextStyle())
-            addTapListener(listener)
-        }
-        val position = binding.mapview.map?.cameraPosition?.run {
-            CameraPosition(point, 15f, azimuth, tilt)
-        } ?: return
-        binding.mapview.map?.move(position, Animation(Animation.Type.SMOOTH, 0.5f), null)
-        val text = geoObject.name.toString()
-        binding.yandexEt.setText(text.toCharArray(),0 ,text.length)
-        yandexTipAdapter?.submitList(mutableListOf())
-    }
-
-    private fun initGoogle(){
+    private fun initGoogle() {
 
         MapsInitializer.initialize(this@MapsActivity, MapsInitializer.Renderer.LATEST, this)
 
@@ -385,7 +374,8 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
         placesClient = Places.createClient(this)
 
-        val autocompleteFragment = supportFragmentManager.findFragmentById(R.id.autocomplete_fragment) as AutocompleteSupportFragment
+        val autocompleteFragment =
+            supportFragmentManager.findFragmentById(R.id.autocomplete_fragment) as AutocompleteSupportFragment
         autocompleteFragment.setPlaceFields(
             listOf(
                 Place.Field.ID,
@@ -399,7 +389,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
                 Place.Field.CURRENT_OPENING_HOURS,
             )
         )
-        if (!countryCode.isNullOrBlank()){
+        if (!countryCode.isNullOrBlank()) {
             autocompleteFragment.setCountry(countryCode)
         }
 
@@ -423,7 +413,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     override fun onStop() {
         super.onStop()
-        if (!startGoogleMap){
+        if (!startGoogleMap) {
             binding.mapview.onStop()
             MapKitFactory.getInstance().onStop()
         }
@@ -431,7 +421,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     override fun onStart() {
         super.onStart()
-        if (!startGoogleMap){
+        if (!startGoogleMap) {
             MapKitFactory.getInstance().onStart()
             binding.mapview.onStart()
         }
@@ -521,56 +511,46 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         }
 
         fusedLocationProviderClient.requestLocationUpdates(
-            LocationRequest.create()
-                .setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY)//设置高精度
+            LocationRequest.create().setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY)//设置高精度
             , //3秒一次定位请求
             locationCallback,
             Looper.getMainLooper()
         )
-//        fusedLocationProviderClient.lastLocation.addOnSuccessListener {
-//            println("Wzz" + it.toString())
-//        }
 
-//        val location = getLastLocation()
-//        println("ss")
-
-//        val currencyLatLng = LatLng(31.275157783962733, 121.42924598009753)
-//        map?.moveCamera(CameraUpdateFactory.newLatLngZoom(currencyLatLng, 16f))
         //获取地图中心位置
         map?.setOnCameraMoveListener {
             map?.cameraPosition?.target?.let {
-                Log.e("地图中心位置","Lat：${it.latitude}，Lng：${it.longitude}")
+                Log.e("地图中心位置", "Lat：${it.latitude}，Lng：${it.longitude}")
             }
         }
 
-
-        println()
-
-    }
-
-    private fun loadPlacePicker() {
-//        val builder: PlacePicker.IntentBuilder = IntentBuilder()
-//        try {
-//            startActivityForResult(builder.build(this@MapsActivity), PLACE_PICKER_REQUEST)
-//        } catch (e: GooglePlayServicesRepairableException) {
-//            e.printStackTrace()
-//        } catch (e: GooglePlayServicesNotAvailableException) {
-//            e.printStackTrace()
-//        }
     }
 
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(locationResult: LocationResult) {
-            if (hasLocation){
+            if (hasLocation) {
                 return
             }
             hasLocation = true
             for (location in locationResult.locations) {
-                if (!startGoogleMap){
+                if (!startGoogleMap) {
+                    println("yandex" + startGoogleMap + "---" + location.latitude + "====" + location.longitude)
+                    val point = Point(location.latitude, location.longitude)
                     val position = binding.mapview.map?.cameraPosition?.run {
-                        CameraPosition(Point(location.latitude,location.longitude), 15f, azimuth, tilt)
+                        CameraPosition(
+                            point,
+                            15f,
+                            azimuth,
+                            tilt
+                        )
                     } ?: return
-                    binding.mapview.map?.move(position, Animation(Animation.Type.SMOOTH, 0.5f), null)
+                    yandexAddPlaceMarker(point)
+                    println("yandex" + position.toString())
+                    binding.mapview.map?.move(
+                        position,
+                        Animation(Animation.Type.SMOOTH, 0.5f),
+                        null
+                    )
                 } else {
                     //google
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -581,49 +561,109 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
         }
 
     }
+    private fun yandexAddPlaceMarker(point: Point){
+        println("yandex" + binding.mapview.map.mapObjects)
+        binding.mapview.map.mapObjects.addPlacemark().apply {
+            geometry = point
+            setIcon(ImageProvider.fromResource(this@MapsActivity, R.drawable.icon_location_select))
+            setIconStyle(
+                IconStyle().apply {
+                    anchor = PointF(0.5f, 2.0f)
+                    scale = 2.6f
+                    zIndex = 20f
+                }
+            )
+            setText("current location", TextStyle().apply {
+                placement = TextStyle.Placement.BOTTOM
+            })
+        }
+    }
 
+    private fun moveYandexTip(geoObject: GeoObject) {
+        val point = geoObject.geometry.get(0).point ?: return
+        val imageProvider = ImageProvider.fromResource(this, R.drawable.search_result)
+        val listener = MapObjectTapListener { p0, p1 ->
+            yandexBack()
+            true
+        }
+        binding.mapview.map?.mapObjects?.addPlacemark()?.apply {
+            geometry = point
+            setIcon(imageProvider)
+            setIconStyle(
+                IconStyle().apply {
+                    anchor = PointF(0.5f, 2.0f)
+                    scale = 1.6f
+                    zIndex = 20f
+                }
+            )
+            setText("${geoObject.name.toString()} \n ", TextStyle().apply {
+                placement = TextStyle.Placement.BOTTOM
+                size = 12f
+            })
+            addTapListener(listener)
+        }
+        val position = binding.mapview.map?.cameraPosition?.run {
+            CameraPosition(point, 15f, azimuth, tilt)
+        } ?: return
+        binding.mapview.map?.move(position, Animation(Animation.Type.SMOOTH, 0.5f), null)
+        val text = geoObject.name.toString()
+        binding.yandexEt.setText(text.toCharArray(), 0, text.length)
+        yandexTipAdapter?.submitList(mutableListOf())
+    }
     @RequiresApi(Build.VERSION_CODES.O)
     private fun drawLocationMarker(location: Location, latLng: LatLng) {
-        if (currentLocation == null){//第一次定位画定位marker
+        if (currentLocation == null) {//第一次定位画定位marker
             currentMarker = map?.addMarker(
-                MarkerOptions().position( latLng).title("")
+                MarkerOptions().position(latLng).title("")
                 //.icon(BitmapDescriptorFactory.fromResource(R.drawable.ic_vehicle_location))
             )
-            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,14f))
+            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 14f))
 
-        }else{
+        } else {
             val deltaTime = location.time - currentLocation!!.time
             //有方位精度
-            if (location.hasBearingAccuracy()){
-                if (deltaTime <= 0){
+            if (location.hasBearingAccuracy()) {
+                if (deltaTime <= 0) {
                     map?.animateCamera(
                         CameraUpdateFactory.newCameraPosition(
                             com.google.android.gms.maps.model.CameraPosition.Builder()
-                            .target(latLng)
-                            .zoom(map?.cameraPosition!!.zoom)
-                            .bearing(location.bearing)
-                            .build()
+                                .target(latLng)
+                                .zoom(map?.cameraPosition!!.zoom)
+                                .bearing(location.bearing)
+                                .build()
 
-                    ))
-                }else{
+                        )
+                    )
+                } else {
                     map?.animateCamera(
                         CameraUpdateFactory.newCameraPosition(
                             com.google.android.gms.maps.model.CameraPosition.Builder()
-                            .target(latLng)
-                            .zoom(map?.cameraPosition!!.zoom)
-                            .bearing(location.bearing)
-                            .build()
-                    ), deltaTime.toInt(),null)
+                                .target(latLng)
+                                .zoom(map?.cameraPosition!!.zoom)
+                                .bearing(location.bearing)
+                                .build()
+                        ), deltaTime.toInt(), null
+                    )
                 }
                 currentMarker?.rotation = 0f
-            }else{
-                if (deltaTime <= 0){
-                    map?.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng,map?.cameraPosition!!.zoom))
-                }else{
-                    map?.animateCamera(CameraUpdateFactory.newLatLngZoom(latLng,map?.cameraPosition!!.zoom), deltaTime.toInt(), null)
+            } else {
+                if (deltaTime <= 0) {
+                    map?.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            latLng,
+                            map?.cameraPosition!!.zoom
+                        )
+                    )
+                } else {
+                    map?.animateCamera(
+                        CameraUpdateFactory.newLatLngZoom(
+                            latLng,
+                            map?.cameraPosition!!.zoom
+                        ), deltaTime.toInt(), null
+                    )
                 }
                 //设置marker的指针方向
-                currentMarker?.rotation = location.bearing - (map?.cameraPosition?.bearing ?:0f)
+                currentMarker?.rotation = location.bearing - (map?.cameraPosition?.bearing ?: 0f)
             }
 
         }
@@ -632,15 +672,15 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     }
 
-    fun addMarker(place: Place){
-        currentPoi = PointOfInterest(place.latLng,place.id,"${place.name}\n${place.address}")
+    fun addMarker(place: Place) {
+        currentPoi = PointOfInterest(place.latLng, place.id, "${place.name}\n${place.address}")
         upBottom()
         val latLng = place.latLng ?: return
 
         val metada = place.photoMetadatas
         if (metada == null || metada.isEmpty()) {
             Log.w(TAG, "No photo metadata.")
-            val bitmap = getResDrawable(R.drawable.icon_launcher)?.toBitmap(300,300)
+            val bitmap = getResDrawable(R.drawable.icon_launcher)?.toBitmap(300, 300)
             val marker = map?.addMarker(
                 MarkerOptions()
                     .position(latLng)
@@ -650,7 +690,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
             )
             marker?.tag = bitmap
             marker?.showInfoWindow()
-            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,15f))
+            map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
             return
 
         }
@@ -677,7 +717,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
                 )
                 marker?.tag = fetchPhotoResponse.bitmap
                 marker?.showInfoWindow()
-                map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng,15f))
+                map?.moveCamera(CameraUpdateFactory.newLatLngZoom(latLng, 15f))
             }?.addOnFailureListener { exception: Exception ->
                 if (exception is ApiException) {
                     Log.e(TAG, "Place not found: " + exception.message)
@@ -689,7 +729,6 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
     }
 
 
-
     fun permissionFail() {
 
 //        Log.e(TAG, "获取权限失败=$requestCode")
@@ -698,7 +737,7 @@ class MapsActivity : AppCompatActivity(), OnMapReadyCallback, OnPoiClickListener
 
     override fun onPoiClick(poi: PointOfInterest) {
 //        currentPoi = poi
-        currentPoi = PointOfInterest(poi.latLng,poi.placeId,"${poi.name}\n${poi.placeId}")
+        currentPoi = PointOfInterest(poi.latLng, poi.placeId, "${poi.name}\n${poi.placeId}")
         upBottom()
     }
 
